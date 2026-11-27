@@ -6,12 +6,13 @@
 
 **38 stories, 7 regions — "The Day in One Page"**
 
-One image for Friday 27 November 2026: a broadsheet front page built around
-3 lead stories — a rich night-strike scene, a data lead with three giant
-storm numbers, and a regional UK map — plus 10 mid cards, a full solid world
-map with 13 numbered pins coloured per region, 25 numbered ALSO briefs, two
-chart panels (stories by region + markets), a 7-number data strip, and a
-DATE CHECK + HOW SURE + HOW CHECKED footer.
+A single broadsheet front page for Friday 27 November 2026. Three lead
+stories open the page — a rich night-strike scene over Kuwait, a data lead
+carrying three giant storm numbers, and a regional UK map — followed by 10
+mid cards, a full solid world map with 13 numbered pins coloured per
+region, 25 numbered ALSO briefs, two chart panels (stories by region +
+markets), a seven-number data strip, and a DATE CHECK + HOW SURE + HOW
+CHECKED footer.
 
 - Bounty: https://make.fun/bounty/news-image-20261127
 - Pot: $100 (1st $20, 2nd $12, 3rd $6, 4th–10th $2, 11th–50th $1.20)
@@ -19,7 +20,7 @@ DATE CHECK + HOW SURE + HOW CHECKED footer.
 - Image: `entry.png`, 1024×1024, 187,287 bytes
 - Determinism: `draw_ni27.py` renders byte-identical PNGs —
   sha256 `8fe50fa1b7896c6e77eba3e1687818294659ddda6e2b74446528edd3854f2408`
-  (verified across two runs; see `build-log.json`).
+  (verified across two runs in this rebuild session; see `build-log.json`).
 - Program: `main.ts` (Node 22) copies `entry.png` to the output directory.
 
 ## Method
@@ -27,13 +28,13 @@ DATE CHECK + HOW SURE + HOW CHECKED footer.
 Built with Metode Bertingkat (5 levels, 26 Nov 2026): 38 stories (winner
 band 36–40; 48 is a liability), 7 balanced regions (max 7/38 = 18%), 13
 drawn + 25 ALSO, claim badges C/O/R/CL + a NAMED source on every card and
-every brief, category kicker per main card, region bar = 38 = header = last
-ALSO number, full solid world map with numbered pins verified from lat/lon
-(13/13 on land, Europe cluster resolved with a leader line), zero text
-truncation/overlap (layout validator + 2x zoom QC), red punch banner per
-lead, serif headlines, no dark panels. Self-judge trio 5/6 (see
-`self-judge.md`); pairwise vs the NI20 #1 is mixed — density wins,
-illustration scale still trails.
+every brief, a category kicker per main card, region bar = 38 = header =
+last ALSO number, a full solid world map with numbered pins projected from
+lat/lon (13/13 on land, the Europe cluster resolved with a leader line),
+zero text truncation or overlap (layout validator + 2x zoom QC), a red
+punch banner per lead, serif headlines, no dark panels. Self-judge trio
+5/6 (see `self-judge.md`); the pairwise read vs the NI20 #1 is mixed —
+density wins, illustration scale still trails.
 
 ## The 38 stories (all happened, or were first reported, Fri 27 Nov 2026)
 

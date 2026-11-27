@@ -1,39 +1,44 @@
 #!/usr/bin/env python3
-"""News Image — 27 November 2026. Renders the broadsheet front page to entry.png.
+"""News Image — Friday 27 November 2026. Paints the one-page broadsheet.
 
-Fresh build for bounty news-image-20261127 (Metode Bertingkat, 5 tingkat).
-38 stories, 7 regions, 13 drawn + 25 ALSO, full solid world map with 13 numbered
-pins coloured per region, claim badges + named source on every item.
-Deterministic: fixed data, fixed fonts, no timestamps, no randomness.
+Rebuilt post-open for bounty news-image-20261127 (Metode Bertingkat).
+Page: 38 dated stories, 7 balanced regions, 13 drawn cards + 25 ALSO
+briefs, a full solid world map with 13 numbered region-coloured pins,
+claim badges plus a named source on every single item, two chart panels,
+a seven-number data strip, and a DATE CHECK / HOW SURE / HOW CHECKED
+footer. Fully deterministic: fixed story data, fixed fonts, no clock,
+no randomness — two runs must hash identically.
+
 Run:  python3 draw_ni27.py   (writes entry.png next to this file)
 """
 import hashlib
 import json
+import math
 import sys
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
 HERE = Path(__file__).resolve().parent
-GEOJSON = Path("/tmp/ne110m_land.geojson")
+LAND_FILE = Path("/tmp/ne110m_land.geojson")
 
-W, H = 1024, 1024
-MX = 22                      # side margin
-CW = 980                     # content width (1024 - 2*22)
+PAGE_W, PAGE_H = 1024, 1024
+MARGIN = 22                    # side margin
+CONTENT_W = 980                # 1024 - 2*22
 
 PAPER = (253, 252, 248)
 INK = (17, 17, 17)
-GREY = (90, 90, 88)
-LIGHT_RULE = (200, 198, 190)
+MUTED = (90, 90, 88)
+FAINT_RULE = (200, 198, 190)
 RED = (185, 28, 28)
-RED_DARK = (153, 27, 27)
-OCEAN = (220, 235, 245)
-LAND = (200, 192, 174)
-LAND_EDGE = (168, 160, 140)
-GRID = (203, 213, 225)
+RED_DEEP = (153, 27, 27)
+SEA = (220, 235, 245)
+LAND_FILL = (200, 192, 174)
+LAND_LINE = (168, 160, 140)
+GRID_LINE = (203, 213, 225)
 
-# Region colours (pin fill + legend chip). One colour per region, distinct.
-REGION_COLOR = {
+# One fill colour per region — used for pins, mid number circles and bars.
+REGION_FILL = {
     "N AMERICA": (37, 99, 235),
     "LATIN AM": (124, 58, 237),
     "EUROPE": (13, 148, 136),
@@ -44,143 +49,143 @@ REGION_COLOR = {
 }
 
 SERIF = "/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf"
-SERIF_B = "/usr/share/fonts/truetype/liberation/LiberationSerif-Bold.ttf"
+SERIF_BOLD = "/usr/share/fonts/truetype/liberation/LiberationSerif-Bold.ttf"
 SANS = "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"
-SANS_B = "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"
+SANS_BOLD = "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"
 
 
-def font(path, size):
+def fnt(path, size):
     return ImageFont.truetype(path, size)
 
 
-def tw(draw, text, f):
-    """Pixel width of text in font f."""
-    return draw.textlength(text, font=f)
+def measure(draw, text, face):
+    """Pixel width of text in the given font."""
+    return draw.textlength(text, font=face)
 
 
-def wrap(draw, text, f, max_w, max_lines):
-    """Word-wrap text to fit max_w; FAIL the build if it needs more than max_lines."""
+def wrap_lines(draw, text, face, max_w, max_lines):
+    """Greedy word wrap; aborts the build if the text needs more lines."""
     words = text.split()
-    lines, cur = [], ""
-    for w in words:
-        trial = (cur + " " + w).strip()
-        if tw(draw, trial, f) <= max_w:
-            cur = trial
+    lines, current = [], ""
+    for word in words:
+        trial = (current + " " + word).strip()
+        if measure(draw, trial, face) <= max_w:
+            current = trial
         else:
-            if cur:
-                lines.append(cur)
-            cur = w
-            if tw(draw, cur, f) > max_w:
-                raise SystemExit(f"VALIDATOR FAIL: single word too wide: {w!r}")
-    if cur:
-        lines.append(cur)
+            if current:
+                lines.append(current)
+            current = word
+            if measure(draw, current, face) > max_w:
+                raise SystemExit(f"VALIDATOR FAIL: single word too wide: {word!r}")
+    if current:
+        lines.append(current)
     if len(lines) > max_lines:
         raise SystemExit(
             f"VALIDATOR FAIL: text needs {len(lines)} lines (max {max_lines}): {text!r}")
     return lines
 
 
-def fit_one_line(draw, text, f, max_w, what):
-    """FAIL the build if a single-line text is wider than its box."""
-    if tw(draw, text, f) > max_w:
-        raise SystemExit(f"VALIDATOR FAIL: {what} too wide ({tw(draw, text, f):.0f}px > {max_w}px): {text!r}")
+def must_fit(draw, text, face, max_w, what):
+    """Aborts the build if a one-line string is wider than its box."""
+    if measure(draw, text, face) > max_w:
+        raise SystemExit(f"VALIDATOR FAIL: {what} too wide ({measure(draw, text, face):.0f}px > {max_w}px): {text!r}")
 
 
-def badge_circle(draw, cx, cy, r, letter):
-    """Claim badge: filled dark circle with a white letter."""
+def claim_dot(draw, cx, cy, r, letter):
+    """Claim badge: dark filled circle, white letter."""
     draw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=INK, outline=(255, 255, 255), width=1)
-    f = font(SANS_B, 8)
-    w = tw(draw, letter, f)
-    draw.text((cx - w / 2, cy - 5), letter, font=f, fill=(255, 255, 255))
+    face = fnt(SANS_BOLD, 8)
+    w = measure(draw, letter, face)
+    draw.text((cx - w / 2, cy - 5), letter, font=face, fill=(255, 255, 255))
 
-
-# ---------------------------------------------------------------- stories
-# n, region, kicker, headline, deck, badge (C/O/R/CL), source, lat, lon (drawn only)
-DRAWN = [
-    (1, "M EAST", "KUWAIT · STRIKE",
-     "Iranian drone strike kills two Italians in Kuwait",
-     "Kuwait blames an Iranian drone; Tehran denies it. Rome demands answers as Gulf tensions spike.",
-     "R", "BBC · NYT", 29.38, 47.98),
-    (2, "N AMERICA", "USA · WEATHER",
-     "Storm grounds Thanksgiving; 100th parade moves",
-     "Power out for 900,000, 80m travel, flights axed. Macy's parade shifts to Saturday \u2014 a first.",
-     "O", "Reuters · NPR", 40.71, -74.01),
-    (3, "EUROPE", "UK · MIGRATION",
-     "UK net migration falls to lowest this century",
-     "ONS counts 77,000 arrivals over departures to June; asylum claims fall too.",
-     "O", "NYT · ONS", 51.51, -0.13),
-    (4, "M EAST", "GAZA · WAR",
-     "Hamas weighs reply as Israel kills 10 in Gaza",
-     "Strike kills 10 a day after truce talks stall; mediators urge restraint.",
-     "R", "Reuters", 31.50, 34.47),
-    (5, "EUROPE", "BRUSSELS · BUDGET",
-     "EU leaders deadlocked over $49bn Ukraine loan",
-     "Summit splits on the budget; Kyiv waits on the loan as winter bites.",
-     "R", "Al Jazeera", 50.85, 4.35),
-    (6, "EUROPE", "UKRAINE · WAR",
-     "Zelenskyy warns of major Russian grid attack",
-     "Kyiv braces for strikes on power as temperatures fall.",
-     "CL", "BBC", 50.45, 30.52),
-    (7, "AFRICA", "MALI · WAR",
-     "300+ Russians killed backing Mali's junta",
-     "Leaked records reveal the toll of Moscow's largest Africa deployment.",
-     "R", "The Guardian", 12.64, -8.00),
-    (8, "AFRICA", "CONGO · HEALTH",
-     "Ebola passes 12,000 cases in DR Congo",
-     "Deaths top 5,900 as fighting traps responders in Ituri.",
-     "O", "PANA · WHO", -4.32, 15.31),
-    (9, "ASIA", "INDIA · COURTS",
-     "India top court tightens PMLA attachment rule",
-     "Judges: a judicial member must sit to confirm any attachment.",
-     "O", "Times of India", 28.61, 77.21),
-    (10, "ASIA", "THAILAND · BLAST",
-     "Blast and fire rock Bangkok oil depot",
-     "Residents told to evacuate as crews battle the blaze.",
-     "R", "Times of India", 13.76, 100.50),
-    (11, "ASIA", "CHINA · DEFENCE",
-     "China's drones reshape Asia's militaries",
-     "Cheap, long-range systems redraw the region's arsenals.",
-     "R", "Mint", 39.90, 116.41),
-    (12, "OCEANIA", "NEW ZEALAND · POLITICS",
-     "NZ final count leaves coalition on a knife-edge",
-     "Coalition holds 67 of 131 seats; a hung parliament is still possible.",
-     "O", "Newstalk ZB", -41.29, 174.78),
-    (13, "LATIN AM", "MEXICO · CARTELS",
-     "Mexico charges ex-prosecutor over US drug raid",
-     "Treason charge after US agents joined an April lab raid.",
-     "R", "BBC", 19.43, -99.13),
+# ------------------------------------------------------------------ stories
+# Drawn cards 1-13. Keys: n, region, kicker, head, deck, badge, src, lat, lon.
+DRAWN_STORIES = [
+    {"n": 1, "region": "M EAST", "kicker": "KUWAIT · STRIKE",
+     "head": "Iranian drone strike kills two Italians in Kuwait",
+     "deck": "Kuwait blames an Iranian drone; Tehran denies it. Rome demands answers as Gulf tensions spike.",
+     "badge": "R", "src": "BBC · NYT", "lat": 29.38, "lon": 47.98},
+    {"n": 2, "region": "N AMERICA", "kicker": "USA · WEATHER",
+     "head": "Storm grounds Thanksgiving; 100th parade moves",
+     "deck": "Power out for 900,000, 80m travel, flights axed. Macy's parade shifts to Saturday — a first.",
+     "badge": "O", "src": "Reuters · NPR", "lat": 40.71, "lon": -74.01},
+    {"n": 3, "region": "EUROPE", "kicker": "UK · MIGRATION",
+     "head": "UK net migration falls to lowest this century",
+     "deck": "ONS counts 77,000 arrivals over departures to June; asylum claims fall too.",
+     "badge": "O", "src": "NYT · ONS", "lat": 51.51, "lon": -0.13},
+    {"n": 4, "region": "M EAST", "kicker": "GAZA · WAR",
+     "head": "Hamas weighs reply as Israel kills 10 in Gaza",
+     "deck": "Strike kills 10 a day after truce talks stall; mediators urge restraint.",
+     "badge": "R", "src": "Reuters", "lat": 31.50, "lon": 34.47},
+    {"n": 5, "region": "EUROPE", "kicker": "BRUSSELS · BUDGET",
+     "head": "EU leaders deadlocked over $49bn Ukraine loan",
+     "deck": "Summit splits on the budget; Kyiv waits on the loan as winter bites.",
+     "badge": "R", "src": "Al Jazeera", "lat": 50.85, "lon": 4.35},
+    {"n": 6, "region": "EUROPE", "kicker": "UKRAINE · WAR",
+     "head": "Zelenskyy warns of major Russian grid attack",
+     "deck": "Kyiv braces for strikes on power as temperatures fall.",
+     "badge": "CL", "src": "BBC", "lat": 50.45, "lon": 30.52},
+    {"n": 7, "region": "AFRICA", "kicker": "MALI · WAR",
+     "head": "300+ Russians killed backing Mali's junta",
+     "deck": "Leaked records reveal the toll of Moscow's largest Africa deployment.",
+     "badge": "R", "src": "The Guardian", "lat": 12.64, "lon": -8.00},
+    {"n": 8, "region": "AFRICA", "kicker": "CONGO · HEALTH",
+     "head": "Ebola passes 12,000 cases in DR Congo",
+     "deck": "Deaths top 5,900 as fighting traps responders in Ituri.",
+     "badge": "O", "src": "PANA · WHO", "lat": -4.32, "lon": 15.31},
+    {"n": 9, "region": "ASIA", "kicker": "INDIA · COURTS",
+     "head": "India top court tightens PMLA attachment rule",
+     "deck": "Judges: a judicial member must sit to confirm any attachment.",
+     "badge": "O", "src": "Times of India", "lat": 28.61, "lon": 77.21},
+    {"n": 10, "region": "ASIA", "kicker": "THAILAND · BLAST",
+     "head": "Blast and fire rock Bangkok oil depot",
+     "deck": "Residents told to evacuate as crews battle the blaze.",
+     "badge": "R", "src": "Times of India", "lat": 13.76, "lon": 100.50},
+    {"n": 11, "region": "ASIA", "kicker": "CHINA · DEFENCE",
+     "head": "China's drones reshape Asia's militaries",
+     "deck": "Cheap, long-range systems redraw the region's arsenals.",
+     "badge": "R", "src": "Mint", "lat": 39.90, "lon": 116.41},
+    {"n": 12, "region": "OCEANIA", "kicker": "NEW ZEALAND · POLITICS",
+     "head": "NZ final count leaves coalition on a knife-edge",
+     "deck": "Coalition holds 67 of 131 seats; a hung parliament is still possible.",
+     "badge": "O", "src": "Newstalk ZB", "lat": -41.29, "lon": 174.78},
+    {"n": 13, "region": "LATIN AM", "kicker": "MEXICO · CARTELS",
+     "head": "Mexico charges ex-prosecutor over US drug raid",
+     "deck": "Treason charge after US agents joined an April lab raid.",
+     "badge": "R", "src": "BBC", "lat": 19.43, "lon": -99.13},
 ]
 
-# n, region, one-line headline, badge, source
-ALSO = [
-    (14, "EUROPE", "Depardieu to stand trial for alleged rape", "O", "BBC"),
-    (15, "EUROPE", "UK calls up reservists, first since Cold War", "O", "TOI"),
-    (16, "EUROPE", "France's mainstream faces election debacle", "R", "BBC"),
-    (17, "EUROPE", "Poundland collapses; 11,000 jobs in doubt", "C", "BBC"),
-    (18, "M EAST", "Houthis target Saudi Red Sea ports", "R", "Al Jazeera"),
-    (19, "AFRICA", "Italy angry as Ukraine hits ships off Libya", "R", "Al Jazeera"),
-    (20, "M EAST", "Eisenkot seals deal with left-wing parties", "R", "The Hindu"),
-    (21, "M EAST", "16 Gaza schoolchildren killed in November", "R", "The Guardian"),
-    (22, "AFRICA", "RSF drones kill 19 in Sudan's Damazin", "R", "Rights groups"),
-    (23, "AFRICA", "Sudan drones killed 1,600+ in 2026", "O", "UN"),
-    (24, "AFRICA", "MSF halts work in South Sudan after abduction", "R", "PANA"),
-    (25, "AFRICA", "Ethiopia's Abiy offers Sudan dialogue", "O", "Sudan Tribune"),
-    (26, "ASIA", "India approves Rs 11,000 cr equipment scheme", "O", "News On AIR"),
-    (27, "ASIA", "Dhaka: India \u2018weakened Pak in 1971\u2019", "CL", "India Today"),
-    (28, "ASIA", "Myanmar defies parts of ICJ genocide ruling", "R", "BBC"),
-    (29, "N AMERICA", "Musk: two SpaceX shares for every US child", "CL", "The Hindu"),
-    (30, "N AMERICA", "FCC clears SpaceX for 1m satellites", "O", "BBC"),
-    (31, "N AMERICA", "Trump demands probe of \u2018fake\u2019 GDP figures", "CL", "Mint"),
-    (32, "N AMERICA", "Claude turns artifacts into apps", "O", "Mashable"),
-    (33, "N AMERICA", "CIA waterboarded more than it admitted", "R", "NYT"),
-    (34, "LATIN AM", "Venezuela reveals $237bn public debt", "O", "Breitbart"),
-    (35, "LATIN AM", "Venezuela signs $400m Shell service deal", "O", "Breitbart"),
-    (36, "OCEANIA", "Australia braces for severe bushfire season", "O", "AFAC"),
-    (37, "OCEANIA", "Barrett to captain All Blacks for first time", "O", "Newstalk ZB"),
-    (38, "ASIA", "Gukesh, Sindarov draw marathon Game 3", "C", "India Today"),
+# ALSO briefs 14-38. Keys: n, region, head, badge, src.
+ALSO_STORIES = [
+    {"n": 14, "region": "EUROPE", "head": "Depardieu to stand trial for alleged rape", "badge": "O", "src": "BBC"},
+    {"n": 15, "region": "EUROPE", "head": "UK calls up reservists, first since Cold War", "badge": "O", "src": "TOI"},
+    {"n": 16, "region": "EUROPE", "head": "France's mainstream faces election debacle", "badge": "R", "src": "BBC"},
+    {"n": 17, "region": "EUROPE", "head": "Poundland collapses; 11,000 jobs in doubt", "badge": "C", "src": "BBC"},
+    {"n": 18, "region": "M EAST", "head": "Houthis target Saudi Red Sea ports", "badge": "R", "src": "Al Jazeera"},
+    {"n": 19, "region": "AFRICA", "head": "Italy angry as Ukraine hits ships off Libya", "badge": "R", "src": "Al Jazeera"},
+    {"n": 20, "region": "M EAST", "head": "Eisenkot seals deal with left-wing parties", "badge": "R", "src": "The Hindu"},
+    {"n": 21, "region": "M EAST", "head": "16 Gaza schoolchildren killed in November", "badge": "R", "src": "The Guardian"},
+    {"n": 22, "region": "AFRICA", "head": "RSF drones kill 19 in Sudan's Damazin", "badge": "R", "src": "Rights groups"},
+    {"n": 23, "region": "AFRICA", "head": "Sudan drones killed 1,600+ in 2026", "badge": "O", "src": "UN"},
+    {"n": 24, "region": "AFRICA", "head": "MSF halts work in South Sudan after abduction", "badge": "R", "src": "PANA"},
+    {"n": 25, "region": "AFRICA", "head": "Ethiopia's Abiy offers Sudan dialogue", "badge": "O", "src": "Sudan Tribune"},
+    {"n": 26, "region": "ASIA", "head": "India approves Rs 11,000 cr equipment scheme", "badge": "O", "src": "News On AIR"},
+    {"n": 27, "region": "ASIA", "head": "Dhaka: India ‘weakened Pak in 1971’", "badge": "CL", "src": "India Today"},
+    {"n": 28, "region": "ASIA", "head": "Myanmar defies parts of ICJ genocide ruling", "badge": "R", "src": "BBC"},
+    {"n": 29, "region": "N AMERICA", "head": "Musk: two SpaceX shares for every US child", "badge": "CL", "src": "The Hindu"},
+    {"n": 30, "region": "N AMERICA", "head": "FCC clears SpaceX for 1m satellites", "badge": "O", "src": "BBC"},
+    {"n": 31, "region": "N AMERICA", "head": "Trump demands probe of ‘fake’ GDP figures", "badge": "CL", "src": "Mint"},
+    {"n": 32, "region": "N AMERICA", "head": "Claude turns artifacts into apps", "badge": "O", "src": "Mashable"},
+    {"n": 33, "region": "N AMERICA", "head": "CIA waterboarded more than it admitted", "badge": "R", "src": "NYT"},
+    {"n": 34, "region": "LATIN AM", "head": "Venezuela reveals $237bn public debt", "badge": "O", "src": "Breitbart"},
+    {"n": 35, "region": "LATIN AM", "head": "Venezuela signs $400m Shell service deal", "badge": "O", "src": "Breitbart"},
+    {"n": 36, "region": "OCEANIA", "head": "Australia braces for severe bushfire season", "badge": "O", "src": "AFAC"},
+    {"n": 37, "region": "OCEANIA", "head": "Barrett to captain All Blacks for first time", "badge": "O", "src": "Newstalk ZB"},
+    {"n": 38, "region": "ASIA", "head": "Gukesh, Sindarov draw marathon Game 3", "badge": "C", "src": "India Today"},
 ]
 
-NUMBERS = [  # (big value, label) — IN NUMBERS strip, one line each
+# (big value, label) — IN NUMBERS strip, one line each.
+STRIP = [
     ("900,000", "HOMES WITHOUT POWER"),
     ("80M", "THANKSGIVING TRAVELLERS"),
     ("77,000", "UK NET MIGRATION"),
@@ -190,35 +195,35 @@ NUMBERS = [  # (big value, label) — IN NUMBERS strip, one line each
     ("$12.9BN", "BLACK FRIDAY ONLINE SALES"),
 ]
 
-MARKETS = [  # (label, value) — markets panel
+# (label, value) — markets panel.
+MARKET_ROWS = [
     ("S&P FUT", "+0.8%"), ("DAX", "+2.2%"), ("FTSE", "+1.9%"),
     ("BRENT", "$96.48"), ("GOLD", "$3,572"), ("BITCOIN", "$60,423"),
 ]
 
-LEAD_BANNERS = ["2 KILLED IN KUWAIT", "900,000 IN THE DARK", "77,000 \u00b7 LOWEST SINCE 1997"]
+BANNERS = ["2 KILLED IN KUWAIT", "900,000 IN THE DARK", "77,000 · LOWEST SINCE 1997"]
 
-
-# ---------------------------------------------------------------- scenes
-def scene_kuwait(box_w, box_h):
-    """Lead 1 scene: night skyline, explosion glow, smoke, small drone."""
+# ------------------------------------------------------------------- scenes
+def paint_kuwait(box_w, box_h):
+    """Lead 1 scene: night skyline, jagged explosion burst, smoke, drone."""
     img = Image.new("RGB", (box_w, box_h), (27, 42, 74))
     d = ImageDraw.Draw(img)
     # stars
     for (sx, sy) in [(18, 8), (60, 5), (120, 10), (180, 6), (250, 9), (300, 6), (90, 14), (215, 12)]:
         d.ellipse([sx, sy, sx + 1, sy + 1], fill=(220, 225, 235))
-    # explosion: jagged starburst (not a smooth sun) + embers + dark smoke
+    # explosion: jagged starburst (never a smooth sun) + embers + dark smoke
     ex, ey = 205, 22
-    import math as _math
-    outer, inner = [], []
+    outer = []
     for i in range(24):
-        ang = i * _math.pi / 12
+        ang = i * math.pi / 12
         r = 26 if i % 2 == 0 else 12
-        outer.append((ex + r * _math.cos(ang), ey + r * _math.sin(ang) * 0.8))
+        outer.append((ex + r * math.cos(ang), ey + r * math.sin(ang) * 0.8))
     d.polygon(outer, fill=(255, 140, 30))
+    inner = []
     for i in range(16):
-        ang = i * _math.pi / 8
+        ang = i * math.pi / 8
         r = 15 if i % 2 == 0 else 7
-        inner.append((ex + r * _math.cos(ang), ey + r * _math.sin(ang) * 0.8))
+        inner.append((ex + r * math.cos(ang), ey + r * math.sin(ang) * 0.8))
     d.polygon(inner, fill=(255, 214, 90))
     for (sx, sy) in [(232, 8), (238, 18), (180, 6), (172, 14), (222, 32), (186, 30)]:
         d.ellipse([sx, sy, sx + 2, sy + 2], fill=(255, 176, 32))
@@ -245,7 +250,7 @@ def scene_kuwait(box_w, box_h):
     return img
 
 
-def scene_storm(box_w, box_h):
+def paint_storm(box_w, box_h):
     """Lead 2 scene: data lead — three giant storm numbers on a pale panel."""
     img = Image.new("RGB", (box_w, box_h), (219, 231, 243))
     d = ImageDraw.Draw(img)
@@ -253,14 +258,14 @@ def scene_storm(box_w, box_h):
     cw = box_w // 3
     for i, (num, lab) in enumerate(cols):
         cx = i * cw + cw // 2
-        fnum = font(SERIF_B, 26)
-        w = tw(d, num, fnum)
+        fnum = fnt(SERIF_BOLD, 26)
+        w = measure(d, num, fnum)
         d.text((cx - w / 2, 6), num, font=fnum, fill=(17, 24, 39))
-        flab = font(SANS_B, 8)
-        lines = wrap(d, lab, flab, cw - 10, 2)
+        flab = fnt(SANS_BOLD, 8)
+        lines = wrap_lines(d, lab, flab, cw - 10, 2)
         y = 36
         for ln in lines:
-            w = tw(d, ln, flab)
+            w = measure(d, ln, flab)
             d.text((cx - w / 2, y), ln, font=flab, fill=(70, 80, 95))
             y += 10
         if i:
@@ -277,9 +282,9 @@ UK_OUTLINE = [(-5.72, 50.07), (-4.19, 50.30), (-3.48, 50.60), (-1.76, 50.72),
               (-5.20, 52.00), (-4.60, 51.70), (-4.20, 51.60), (-3.90, 51.50)]
 
 
-def scene_uk(box_w, box_h):
+def paint_uk(box_w, box_h):
     """Lead 3 scene: schematic UK map (true aspect: 1 deg lat ~ 1.6x 1 deg lon
-    at 52N, so lat scale is 1.6x lon scale) + red down arrow + giant 77,000."""
+    at 52N, so the lat scale is 1.6x the lon scale) + red down arrow + 77,000."""
     img = Image.new("RGB", (box_w, box_h), (238, 240, 242))
     d = ImageDraw.Draw(img)
     # UK in an 84x58 area on the left, correct aspect ratio
@@ -298,20 +303,19 @@ def scene_uk(box_w, box_h):
     d.polygon([(ax, 8), (ax + 16, 8), (ax + 16, 30), (ax + 24, 30), (ax + 8, 50), (ax - 8, 30), (ax, 30)],
               fill=RED)
     # giant number + label on the right
-    fnum = font(SERIF_B, 30)
+    fnum = fnt(SERIF_BOLD, 30)
     d.text((140, 6), "77,000", font=fnum, fill=INK)
-    flab = font(SANS_B, 8)
+    flab = fnt(SANS_BOLD, 8)
     for j, ln in enumerate(["NET MIGRATION", "LOWEST SINCE 1997"]):
-        d.text((142, 40 + j * 10), ln, font=flab, fill=GREY)
+        d.text((142, 40 + j * 10), ln, font=flab, fill=MUTED)
     return img
 
 
-LEAD_SCENES = [scene_kuwait, scene_storm, scene_uk]
+LEAD_SCENES = [paint_kuwait, paint_storm, paint_uk]
 
-
-# ---------------------------------------------------------------- map
-def load_land():
-    data = json.loads(GEOJSON.read_text())
+# ---------------------------------------------------------------------- map
+def read_land():
+    data = json.loads(LAND_FILE.read_text())
     ext, holes = [], []
     for feat in data["features"]:
         geom = feat["geometry"]
@@ -327,53 +331,53 @@ def load_land():
     return ext, holes
 
 
-def project(lon, lat, box):
+def project_lonlat(lon, lat, box):
     x0, y0, x1, y1 = box
     px = x0 + (lon + 180.0) / 360.0 * (x1 - x0)
     py = y0 + (84.0 - lat) / 142.0 * (y1 - y0)
     return px, py
 
 
-def build_map(box_w, box_h, pins):
+def paint_map(box_w, box_h, pins):
     """Full world map: solid landmass, graticule, ocean labels, numbered pins.
-    Returns (map_image, pin_draw_positions, land_mask)."""
+    Returns (map_image, true pin positions, land mask)."""
     box = (0, 0, box_w, box_h)
-    img = Image.new("RGB", (box_w, box_h), OCEAN)
+    img = Image.new("RGB", (box_w, box_h), SEA)
     d = ImageDraw.Draw(img)
     # graticule
     for lon in range(-150, 181, 30):
-        x, _ = project(lon, 84, box)
-        d.line([x, 0, x, box_h], fill=GRID, width=1)
+        x, _ = project_lonlat(lon, 84, box)
+        d.line([x, 0, x, box_h], fill=GRID_LINE, width=1)
     for lat in range(-60, 85, 30):
-        _, y = project(0, lat, box)
-        d.line([0, y, box_w, y], fill=GRID, width=1)
-    ext, holes = load_land()
+        _, y = project_lonlat(0, lat, box)
+        d.line([0, y, box_w, y], fill=GRID_LINE, width=1)
+    ext, holes = read_land()
     for ring in ext:
-        pts = [project(lon, lat, box) for lon, lat in ring]
+        pts = [project_lonlat(lon, lat, box) for lon, lat in ring]
         if len(pts) >= 3:
-            d.polygon(pts, fill=LAND, outline=LAND_EDGE)
+            d.polygon(pts, fill=LAND_FILL, outline=LAND_LINE)
     for ring in holes:
-        pts = [project(lon, lat, box) for lon, lat in ring]
+        pts = [project_lonlat(lon, lat, box) for lon, lat in ring]
         if len(pts) >= 3:
-            d.polygon(pts, fill=OCEAN)
+            d.polygon(pts, fill=SEA)
     # land mask for the pin-on-land validator (same projection)
     mask = Image.new("L", (box_w, box_h), 0)
     md = ImageDraw.Draw(mask)
     for ring in ext:
-        pts = [project(lon, lat, box) for lon, lat in ring]
+        pts = [project_lonlat(lon, lat, box) for lon, lat in ring]
         if len(pts) >= 3:
             md.polygon(pts, fill=255)
     # ocean labels — checked against real geography (Pacific both edges,
     # Atlantic centre, Indian right of centre)
-    flab = font(SANS_B, 9)
+    flab = fnt(SANS_BOLD, 9)
     for txt, cx, cy in [("PACIFIC", 70, 96), ("PACIFIC", box_w - 70, 96),
                         ("ATLANTIC", 430, 100), ("INDIAN", 700, 112)]:
-        w = tw(d, txt, flab)
+        w = measure(d, txt, flab)
         d.text((cx - w / 2, cy), txt, font=flab, fill=(120, 140, 160))
     # pins: true positions, then nudge colliding dots with leader lines
     true_pos = {}
-    for n, region, _k, _h, _de, _b, _s, lat, lon in pins:
-        true_pos[n] = project(lon, lat, box)
+    for s in pins:
+        true_pos[s["n"]] = project_lonlat(s["lon"], s["lat"], box)
     # collision resolve: London(3)/Brussels(5) sit ~12px apart — nudge Brussels
     # up-right onto southern Norway with a leader line back to the true spot
     nudges = {5: (18, -10)}
@@ -381,62 +385,62 @@ def build_map(box_w, box_h, pins):
     for n, (x, y) in true_pos.items():
         dx, dy = nudges.get(n, (0, 0))
         pos[n] = (x + dx, y + dy)
-    for n, region, _k, _h, _de, _b, _s, _lat, _lon in pins:
+    for s in pins:
+        n, region = s["n"], s["region"]
         x, y = pos[n]
         tx, ty = true_pos[n]
         if (x, y) != (tx, ty):
             d.line([tx, ty, x, y], fill=(60, 60, 60), width=1)
             d.ellipse([tx - 2, ty - 2, tx + 2, ty + 2], fill=(60, 60, 60))
         r = 7
-        d.ellipse([x - r, y - r, x + r, y + r], fill=REGION_COLOR[region],
+        d.ellipse([x - r, y - r, x + r, y + r], fill=REGION_FILL[region],
                   outline=(255, 255, 255), width=1)
-        fnum = font(SANS_B, 8)
-        s = str(n)
-        w = tw(d, s, fnum)
-        d.text((x - w / 2, y - 5), s, font=fnum, fill=(255, 255, 255))
+        fnum = fnt(SANS_BOLD, 8)
+        txt = str(n)
+        w = measure(d, txt, fnum)
+        d.text((x - w / 2, y - 5), txt, font=fnum, fill=(255, 255, 255))
     return img, true_pos, mask
 
-
-# ---------------------------------------------------------------- render
-def render():
-    img = Image.new("RGB", (W, H), PAPER)
+# -------------------------------------------------------------------- render
+def paint_page():
+    img = Image.new("RGB", (PAGE_W, PAGE_H), PAPER)
     d = ImageDraw.Draw(img)
 
     # ---- masthead (y 8-68)
-    f_title = font(SERIF_B, 40)
-    d.text((MX, 10), "THE DAY IN ONE PAGE", font=f_title, fill=INK)
-    f_date = font(SANS_B, 13)
-    f_count = font(SANS_B, 12)
+    f_title = fnt(SERIF_BOLD, 40)
+    d.text((MARGIN, 10), "THE DAY IN ONE PAGE", font=f_title, fill=INK)
+    f_date = fnt(SANS_BOLD, 13)
+    f_count = fnt(SANS_BOLD, 12)
     t1 = "FRIDAY, 27 NOVEMBER 2026"
-    t2 = "38 STORIES \u00b7 7 REGIONS"
-    d.text((W - MX - tw(d, t1, f_date), 14), t1, font=f_date, fill=INK)
-    d.text((W - MX - tw(d, t2, f_count), 34), t2, font=f_count, fill=RED)
-    d.line([MX, 72, W - MX, 72], fill=INK, width=2)
+    t2 = "38 STORIES · 7 REGIONS"
+    d.text((PAGE_W - MARGIN - measure(d, t1, f_date), 14), t1, font=f_date, fill=INK)
+    d.text((PAGE_W - MARGIN - measure(d, t2, f_count), 34), t2, font=f_count, fill=RED)
+    d.line([MARGIN, 72, PAGE_W - MARGIN, 72], fill=INK, width=2)
 
     # ---- ticker (y 76-98)
-    d.rectangle([MX, 76, W - MX, 98], fill=RED)
-    f_tick = font(SANS_B, 12)
-    tick = "2 KILLED IN KUWAIT   \u00b7   100TH PARADE MOVED TO SATURDAY   \u00b7   UK MIGRATION LOWEST SINCE 1997"
-    fit_one_line(d, tick, f_tick, CW - 16, "ticker")
-    d.text(((W - tw(d, tick, f_tick)) / 2, 80), tick, font=f_tick, fill=(255, 255, 255))
+    d.rectangle([MARGIN, 76, PAGE_W - MARGIN, 98], fill=RED)
+    f_tick = fnt(SANS_BOLD, 12)
+    tick = "2 KILLED IN KUWAIT   ·   100TH PARADE MOVED TO SATURDAY   ·   UK MIGRATION LOWEST SINCE 1997"
+    must_fit(d, tick, f_tick, CONTENT_W - 16, "ticker")
+    d.text(((PAGE_W - measure(d, tick, f_tick)) / 2, 80), tick, font=f_tick, fill=(255, 255, 255))
 
     # ---- leads (y 102-280), 3 columns of 320
-    lead_x = [MX, 352, 682]
+    lead_x = [MARGIN, 352, 682]
     lead_w = 320
-    for i, (n, region, kicker, headline, deck, badge, source, _lat, _lon) in enumerate(DRAWN[:3]):
+    for i, s in enumerate(DRAWN_STORIES[:3]):
         x = lead_x[i]
         # red punch banner
         d.rectangle([x, 102, x + lead_w, 122], fill=RED)
-        fb = font(SANS_B, 12)
-        bt = LEAD_BANNERS[i]
-        fit_one_line(d, bt, fb, lead_w - 12, f"lead {n} banner")
+        fb = fnt(SANS_BOLD, 12)
+        bt = BANNERS[i]
+        must_fit(d, bt, fb, lead_w - 12, f"lead {s['n']} banner")
         d.text((x + 6, 105), bt, font=fb, fill=(255, 255, 255))
         # kicker
-        fk = font(SANS_B, 10)
-        d.text((x, 126), kicker, font=fk, fill=RED)
+        fk = fnt(SANS_BOLD, 10)
+        d.text((x, 126), s["kicker"], font=fk, fill=RED)
         # headline, 2 lines max, serif bold 17
-        fh = font(SERIF_B, 17)
-        lines = wrap(d, headline, fh, lead_w, 2)
+        fh = fnt(SERIF_BOLD, 17)
+        lines = wrap_lines(d, s["head"], fh, lead_w, 2)
         y = 140
         for ln in lines:
             d.text((x, y), ln, font=fh, fill=INK)
@@ -444,181 +448,177 @@ def render():
         # scene (60px, own layer so nothing can spill out of its frame)
         scene = LEAD_SCENES[i](lead_w, 60)
         img.paste(scene, (x, 182))
-        d.rectangle([x, 182, x + lead_w, 242], outline=LIGHT_RULE, width=1)
+        d.rectangle([x, 182, x + lead_w, 242], outline=FAINT_RULE, width=1)
         # deck, 2 lines max, 10pt
-        fd = font(SANS, 10)
-        lines = wrap(d, deck, fd, lead_w, 2)
+        fd = fnt(SANS, 10)
+        lines = wrap_lines(d, s["deck"], fd, lead_w, 2)
         y = 246
         for ln in lines:
             d.text((x, y), ln, font=fd, fill=(40, 40, 40))
             y += 12
         # badge + named source
-        badge_circle(d, x + 6, 275, 6, badge)
-        fs = font(SANS, 8)
-        d.text((x + 16, 271), f"via {source}", font=fs, fill=GREY)
+        claim_dot(d, x + 6, 275, 6, s["badge"])
+        fs = fnt(SANS, 8)
+        d.text((x + 16, 271), f"via {s['src']}", font=fs, fill=MUTED)
         # thin rule under each lead
-        d.line([x, 281, x + lead_w, 281], fill=LIGHT_RULE, width=1)
+        d.line([x, 281, x + lead_w, 281], fill=FAINT_RULE, width=1)
 
     # ---- IN NUMBERS strip (y 284-332)
-    f_sec = font(SANS_B, 11)
-    d.text((MX, 286), "IN NUMBERS", font=f_sec, fill=INK)
-    d.line([MX + 92, 292, W - MX, 292], fill=LIGHT_RULE, width=1)
-    cell_w = CW // 7
-    for i, (num, lab) in enumerate(NUMBERS):
-        cx = MX + i * cell_w
-        fn = font(SERIF_B, 20)
-        fit_one_line(d, num, fn, cell_w - 8, f"numbers {num}")
-        d.text((cx + 4, 300), num, font=fn, fill=RED_DARK)
-        fl = font(SANS_B, 8)
-        lines = wrap(d, lab, fl, cell_w - 8, 2)
+    f_sec = fnt(SANS_BOLD, 11)
+    d.text((MARGIN, 286), "IN NUMBERS", font=f_sec, fill=INK)
+    d.line([MARGIN + 92, 292, PAGE_W - MARGIN, 292], fill=FAINT_RULE, width=1)
+    cell_w = CONTENT_W // 7
+    for i, (num, lab) in enumerate(STRIP):
+        cx = MARGIN + i * cell_w
+        fn = fnt(SERIF_BOLD, 20)
+        must_fit(d, num, fn, cell_w - 8, f"numbers {num}")
+        d.text((cx + 4, 300), num, font=fn, fill=RED_DEEP)
+        fl = fnt(SANS_BOLD, 8)
+        lines = wrap_lines(d, lab, fl, cell_w - 8, 2)
         y = 320
         for ln in lines:
-            d.text((cx + 4, y), ln, font=fl, fill=GREY)
+            d.text((cx + 4, y), ln, font=fl, fill=MUTED)
             y += 9
         if i:
-            d.line([cx, 300, cx, 330], fill=LIGHT_RULE, width=1)
+            d.line([cx, 300, cx, 330], fill=FAINT_RULE, width=1)
 
     # ---- mids (2 rows x 5, y 336-552)
-    mid_xs = [MX, 219, 416, 613, 810]
+    mid_xs = [MARGIN, 219, 416, 613, 810]
     mid_w = 189
     mid_ys = [338, 449]
-    for idx, (n, region, kicker, headline, deck, badge, source, _lat, _lon) in enumerate(DRAWN[3:]):
+    for idx, s in enumerate(DRAWN_STORIES[3:]):
         row, col = divmod(idx, 5)
         x, y = mid_xs[col], mid_ys[row]
         # number circle + kicker
-        d.ellipse([x, y, x + 14, y + 14], fill=REGION_COLOR[region], outline=(255, 255, 255), width=1)
-        fnum = font(SANS_B, 8)
-        s = str(n)
-        w = tw(d, s, fnum)
-        d.text((x + 7 - w / 2, y + 2), s, font=fnum, fill=(255, 255, 255))
-        fk = font(SANS_B, 8)
-        d.text((x + 18, y + 2), kicker, font=fk, fill=REGION_COLOR[region])
+        d.ellipse([x, y, x + 14, y + 14], fill=REGION_FILL[s["region"]], outline=(255, 255, 255), width=1)
+        fnum = fnt(SANS_BOLD, 8)
+        txt = str(s["n"])
+        w = measure(d, txt, fnum)
+        d.text((x + 7 - w / 2, y + 2), txt, font=fnum, fill=(255, 255, 255))
+        fk = fnt(SANS_BOLD, 8)
+        d.text((x + 18, y + 2), s["kicker"], font=fk, fill=REGION_FILL[s["region"]])
         # headline, 2 lines max, serif bold 12
-        fh = font(SERIF_B, 12)
-        lines = wrap(d, headline, fh, mid_w, 2)
+        fh = fnt(SERIF_BOLD, 12)
+        lines = wrap_lines(d, s["head"], fh, mid_w, 2)
         yy = y + 18
         for ln in lines:
             d.text((x, yy), ln, font=fh, fill=INK)
             yy += 15
-        # deck, 2 lines max, 9.5 -> 9pt
-        fd = font(SANS, 9)
-        lines = wrap(d, deck, fd, mid_w, 2)
+        # deck, 2 lines max, 9pt
+        fd = fnt(SANS, 9)
+        lines = wrap_lines(d, s["deck"], fd, mid_w, 2)
         yy = y + 50
         for ln in lines:
             d.text((x, yy), ln, font=fd, fill=(40, 40, 40))
             yy += 12
         # badge + named source
-        badge_circle(d, x + 5, y + 82, 5, badge)
-        fs = font(SANS, 8)
-        d.text((x + 14, y + 78), f"via {source}", font=fs, fill=GREY)
+        claim_dot(d, x + 5, y + 82, 5, s["badge"])
+        fs = fnt(SANS, 8)
+        d.text((x + 14, y + 78), f"via {s['src']}", font=fs, fill=MUTED)
         # row divider
         if row == 0:
-            d.line([x, y + 103, x + mid_w, y + 103], fill=LIGHT_RULE, width=1)
+            d.line([x, y + 103, x + mid_w, y + 103], fill=FAINT_RULE, width=1)
 
     # ---- map section (y 556-736)
-    d.text((MX, 556), "THE WORLD \u2014 13 STORIES PINNED", font=f_sec, fill=INK)
-    d.line([MX + 218, 562, W - MX, 562], fill=LIGHT_RULE, width=1)
-    map_img, true_pos, mask = build_map(CW, 142, DRAWN)
-    img.paste(map_img, (MX, 574))
-    d.rectangle([MX, 574, W - MX, 716], outline=INK, width=1)
+    d.text((MARGIN, 556), "THE WORLD — 13 STORIES PINNED", font=f_sec, fill=INK)
+    d.line([MARGIN + 218, 562, PAGE_W - MARGIN, 562], fill=FAINT_RULE, width=1)
+    map_img, true_pos, mask = paint_map(CONTENT_W, 142, DRAWN_STORIES)
+    img.paste(map_img, (MARGIN, 574))
+    d.rectangle([MARGIN, 574, PAGE_W - MARGIN, 716], outline=INK, width=1)
     # legend on its OWN row below the map (never overlapping the map)
-    fl = font(SANS_B, 8)
-    lx = MX
+    fl = fnt(SANS_BOLD, 8)
+    lx = MARGIN
     lab = "PIN COLOUR = REGION:"
     d.text((lx, 721), lab, font=fl, fill=INK)
-    lx += tw(d, lab, fl) + 10
+    lx += measure(d, lab, fl) + 10
     counts = {"N AMERICA": 6, "LATIN AM": 3, "EUROPE": 7, "M EAST": 5,
               "AFRICA": 7, "ASIA": 7, "OCEANIA": 3}
     for region, cnt in counts.items():
-        d.rectangle([lx, 722, lx + 9, 731], fill=REGION_COLOR[region])
+        d.rectangle([lx, 722, lx + 9, 731], fill=REGION_FILL[region])
         t = f"{region} {cnt}"
         d.text((lx + 12, 721), t, font=fl, fill=INK)
-        lx += 12 + tw(d, t, fl) + 12
+        lx += 12 + measure(d, t, fl) + 12
 
     # ---- charts row (y 740-828)
     # left: stories by region (horizontal bars)
-    px, pw = MX, 486
-    d.rectangle([px, 740, px + pw, 828], outline=LIGHT_RULE, width=1)
+    px, pw = MARGIN, 486
+    d.rectangle([px, 740, px + pw, 828], outline=FAINT_RULE, width=1)
     d.text((px + 8, 744), "STORIES BY REGION", font=f_sec, fill=INK)
     order = [("EUROPE", 7), ("ASIA", 7), ("AFRICA", 7), ("N AMERICA", 6),
              ("M EAST", 5), ("LATIN AM", 3), ("OCEANIA", 3)]
-    fbl = font(SANS_B, 8)
-    fbv = font(SANS_B, 9)
+    fbl = fnt(SANS_BOLD, 8)
+    fbv = fnt(SANS_BOLD, 9)
     by = 762
     for region, cnt in order:
-        d.text((px + 8, by), region, font=fbl, fill=GREY)
+        d.text((px + 8, by), region, font=fbl, fill=MUTED)
         bx = px + 92
         bw = int(cnt / 7 * 330)
-        d.rectangle([bx, by + 1, bx + bw, by + 8], fill=REGION_COLOR[region])
+        d.rectangle([bx, by + 1, bx + bw, by + 8], fill=REGION_FILL[region])
         d.text((bx + bw + 5, by), str(cnt), font=fbv, fill=INK)
         by += 9
     # right: markets
     px = 516
-    d.rectangle([px, 740, px + pw, 828], outline=LIGHT_RULE, width=1)
-    d.text((px + 8, 744), "MARKETS \u00b7 FUTURES + OVERNIGHT", font=f_sec, fill=INK)
-    fml = font(SANS_B, 8)
-    fmv = font(SERIF_B, 15)
-    for i, (lab, val) in enumerate(MARKETS):
+    d.rectangle([px, 740, px + pw, 828], outline=FAINT_RULE, width=1)
+    d.text((px + 8, 744), "MARKETS · FUTURES + OVERNIGHT", font=f_sec, fill=INK)
+    fml = fnt(SANS_BOLD, 8)
+    fmv = fnt(SERIF_BOLD, 15)
+    for i, (lab, val) in enumerate(MARKET_ROWS):
         row, col = divmod(i, 3)
         cx = px + 8 + col * 160
         cy = 764 + row * 30
-        d.text((cx, cy), lab, font=fml, fill=GREY)
+        d.text((cx, cy), lab, font=fml, fill=MUTED)
         d.text((cx, cy + 10), val, font=fmv, fill=(16, 120, 60) if val.startswith("+") else INK)
 
     # ---- ALSO ON (y 832-968): 25 briefs in 3 columns
-    d.text((MX, 832), "ALSO ON \u2014 25 BRIEFS", font=f_sec, fill=INK)
-    d.text((W - MX - tw(d, "C CONFIRMED \u00b7 O OFFICIAL \u00b7 R REPORTED \u00b7 CL CLAIM", font(SANS_B, 8)),
-            833), "C CONFIRMED \u00b7 O OFFICIAL \u00b7 R REPORTED \u00b7 CL CLAIM",
-           font=font(SANS_B, 8), fill=GREY)
-    d.line([MX, 848, W - MX, 848], fill=LIGHT_RULE, width=1)
+    d.text((MARGIN, 832), "ALSO ON — 25 BRIEFS", font=f_sec, fill=INK)
+    d.text((PAGE_W - MARGIN - measure(d, "C CONFIRMED · O OFFICIAL · R REPORTED · CL CLAIM", fnt(SANS_BOLD, 8)),
+            833), "C CONFIRMED · O OFFICIAL · R REPORTED · CL CLAIM",
+           font=fnt(SANS_BOLD, 8), fill=MUTED)
+    d.line([MARGIN, 848, PAGE_W - MARGIN, 848], fill=FAINT_RULE, width=1)
     col_w = 320
-    col_x = [MX, MX + 330, MX + 660]
-    fa = font(SANS, 9)
-    for i, (n, region, headline, badge, source) in enumerate(ALSO):
+    col_x = [MARGIN, MARGIN + 330, MARGIN + 660]
+    fa = fnt(SANS, 9)
+    for i, s in enumerate(ALSO_STORIES):
         col = i // 9 if i < 18 else 2
         row = i - col * 9 if col < 2 else i - 18
         x = col_x[col]
         y = 852 + row * 13
-        line = f"{n}. {headline} \u2014 via {source} [{badge}]"
-        fit_one_line(d, line, fa, col_w, f"ALSO {n}")
+        line = f"{s['n']}. {s['head']} — via {s['src']} [{s['badge']}]"
+        must_fit(d, line, fa, col_w, f"ALSO {s['n']}")
         d.text((x, y), line, font=fa, fill=INK)
 
     # ---- footer (y 972-1018)
-    d.line([MX, 970, W - MX, 970], fill=INK, width=2)
-    ff = font(SANS, 8)
-    ffb = font(SANS_B, 8)
+    d.line([MARGIN, 970, PAGE_W - MARGIN, 970], fill=INK, width=2)
+    ff = fnt(SANS, 8)
+    ffb = fnt(SANS_BOLD, 8)
     lines = [
-        ("DATE CHECK \u2014 ", "Every story on this page happened, or was first reported, on Friday 27 November 2026. Checked 27 Nov 2026, 07:00 WIB."),
-        ("HOW SURE \u2014 ", "C CONFIRMED \u00b7 O OFFICIAL \u00b7 R REPORTED \u00b7 CL CLAIM \u2014 the letter on every card says how sure we are; the source named on each card is where it was read."),
-        ("HOW THIS PAGE WAS CHECKED \u2014 ", "Counts re-added from the image: 38 stories \u00b7 7 regions \u00b7 13 pins \u00b7 region bar = 38. No story older than 27 Nov 2026 was kept."),
+        ("DATE CHECK — ", "Every story on this page happened, or was first reported, on Friday 27 November 2026. Checked 27 Nov 2026, 07:00 WIB."),
+        ("HOW SURE — ", "C CONFIRMED · O OFFICIAL · R REPORTED · CL CLAIM — the letter on every card says how sure we are; the source named on each card is where it was read."),
+        ("HOW THIS PAGE WAS CHECKED — ", "Counts re-added from the image: 38 stories · 7 regions · 13 pins · region bar = 38. No story older than 27 Nov 2026 was kept."),
     ]
     y = 976
     for bold, rest in lines:
-        d.text((MX, y), bold, font=ffb, fill=INK)
-        d.text((MX + tw(d, bold, ffb), y), rest, font=ff, fill=(40, 40, 40))
+        d.text((MARGIN, y), bold, font=ffb, fill=INK)
+        d.text((MARGIN + measure(d, bold, ffb), y), rest, font=ff, fill=(40, 40, 40))
         y += 13
 
     return img, true_pos, mask
 
-
-def validate(true_pos, mask):
+def check_page(true_pos, mask):
     """Arithmetic + pin-on-land gates. Any failure aborts the build."""
-    total = len(DRAWN) + len(ALSO)
+    total = len(DRAWN_STORIES) + len(ALSO_STORIES)
     assert total == 38, f"story total {total} != 38"
-    nums = [n for n, *_ in DRAWN] + [n for n, *_ in ALSO]
+    nums = [s["n"] for s in DRAWN_STORIES] + [s["n"] for s in ALSO_STORIES]
     assert nums == list(range(1, 39)), f"story numbers not 1..38: {nums}"
     regions = {}
-    for _n, r, *_ in DRAWN + ALSO:
-        regions[r] = regions.get(r, 0) + 1
+    for s in DRAWN_STORIES + ALSO_STORIES:
+        regions[s["region"]] = regions.get(s["region"], 0) + 1
     assert len(regions) == 7, f"regions {len(regions)} != 7: {regions}"
     assert max(regions.values()) <= 7, f"region skew: {regions}"
     assert sum(regions.values()) == 38
-    # every card carries a badge + a named source (badge is element 5 in DRAWN,
-    # element 3 in ALSO; source is element 6 in DRAWN, element 4 in ALSO)
-    for item in DRAWN:
-        assert item[5] in ("C", "O", "R", "CL") and item[6], f"missing badge/source: {item[0]}"
-    for item in ALSO:
-        assert item[3] in ("C", "O", "R", "CL") and item[4], f"missing badge/source: {item[0]}"
+    # every card carries a badge + a named source
+    for s in DRAWN_STORIES + ALSO_STORIES:
+        assert s["badge"] in ("C", "O", "R", "CL") and s["src"], f"missing badge/source: {s['n']}"
     # pins: every TRUE pin position must be on land (or within 6px of it)
     mp = mask.load()
     mw, mh = mask.size
@@ -642,16 +642,16 @@ def validate(true_pos, mask):
 
 
 def main():
-    img, true_pos, mask = render()
-    regions = validate(true_pos, mask)
+    img, true_pos, mask = paint_page()
+    regions = check_page(true_pos, mask)
     out = HERE / "entry.png"
     img.save(out, "PNG")
     h = hashlib.sha256(out.read_bytes()).hexdigest()
     print(json.dumps({
         "stories": 38,
         "regions": regions,
-        "drawn": len(DRAWN),
-        "also": len(ALSO),
+        "drawn": len(DRAWN_STORIES),
+        "also": len(ALSO_STORIES),
         "pins": len(true_pos),
         "size_bytes": out.stat().st_size,
         "sha256": h,

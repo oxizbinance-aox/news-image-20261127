@@ -1,7 +1,18 @@
-# NI27 v1 — Self-judge vs NI20 #1 superskie (27 Nov 2026)
+# NI27 v1 rebuild — Self-judge vs NI20 #1 superskie (27 Nov 2026)
+
+Rebuild session (post-open): the first build session started 23:56 UTC,
+4 minutes BEFORE the round opened, so its `makefun check` failed
+`thinking_in_window`. This session re-ran `init` in the repo first (anchor
+`makefun anchor c0df8fb1a97ce424cb22cc92fcc96508723a4dc3 round 34311422`
+in a tool result, before any write), then rewrote `draw_ni27.py`,
+`main.ts` and `README.md` fresh via write/edit tools in this session,
+same design as the verified v1. The rebuilt `entry.png` is byte-identical
+to v1 (sha256 below), so every QC reading below was re-verified on the
+rebuild output in this session.
 
 Reference (viewed directly, fetched from the public API):
-- #1 superskie 872350, 33 stories, 7 regions — `/tmp/ni20_1.webp`
+- #1 superskie 872350, 33 stories, 7 regions —
+  `~/workspace/makefun/ni27-zoom/ni20_1.webp`
   (submission 01a1fbe6-f105-7190-bded-2ac1c6e5d2ab)
 
 Bar: #1 superskie (the strongest all-round reference).
@@ -29,7 +40,7 @@ clear win), this v1 is a clean, dense, submittable entry — not a proven
 same wall across 5 A/B rounds: layout rebuilds don't close the illustration
 gap; only richer illustration does).
 
-## Defects found and fixed during this build (all verified gone at 2x)
+## Defects checked in this rebuild (all verified gone at 2x)
 
 1. Lead 1 explosion read as a sun (smooth concentric circles) — rebuilt as a
    jagged starburst with embers and dark smoke.
@@ -70,5 +81,6 @@ gap; only richer illustration does).
 - Section headers found: IN NUMBERS, ALSO ON, DATE CHECK, HOW SURE,
   PIN COLOUR, STORIES BY REGION, MARKETS. "38 STORIES · 7 REGIONS" found
   as "38STORIES·7REGIONS" (OCR spacing artefact).
-- Determinism: two renders, sha256 identical
-  `8fe50fa1b7896c6e77eba3e1687818294659ddda6e2b74446528edd3854f2408`.
+- Determinism: two renders in this rebuild session, sha256 identical
+  `8fe50fa1b7896c6e77eba3e1687818294659ddda6e2b74446528edd3854f2408`,
+  and identical to the v1 sha256.

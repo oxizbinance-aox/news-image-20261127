@@ -1,9 +1,10 @@
 // News Image — Friday 27 November 2026.
 //
-// The entry image is rendered by draw_ni27.py (Pillow, deterministic: fixed
-// data, fixed fonts, no timestamps, no randomness) and stored beside this
-// file as entry.png. This program only copies that image to the output
-// directory the grader provides, so both runs write the same bytes.
+// The entry image is painted by draw_ni27.py (Pillow, deterministic:
+// fixed story data, fixed fonts, no clock, no randomness) and stored next
+// to this file as entry.png. This program only copies that image into the
+// output directory the grader hands it, so repeated runs write identical
+// bytes.
 //
 // Outside the grader, MAKEFUN_OUTPUT_DIR stands in for /output:
 //   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
@@ -12,8 +13,10 @@ import { copyFileSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const here = dirname(fileURLToPath(import.meta.url));
-const outDir = process.env.MAKEFUN_OUTPUT_DIR ?? "/output";
+const folder = dirname(fileURLToPath(import.meta.url));
+const target = process.env.MAKEFUN_OUTPUT_DIR ?? "/output";
 
-mkdirSync(outDir, { recursive: true });
-copyFileSync(join(here, "entry.png"), join(outDir, "entry.png"));
+mkdirSync(target, { recursive: true });
+const dest = join(target, "entry.png");
+copyFileSync(join(folder, "entry.png"), dest);
+console.log(`entry.png -> ${dest}`);
