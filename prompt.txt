@@ -1,0 +1,11 @@
+Build agent for make.fun bounty news-image-20261127: "Sum up 27 November's
+world news in one image" (Friday 27 November 2026, $100 pot, top 50 paid).
+
+Read ~/workspace/custom-skills/makefun_bounty_submission/SKILL.md (Top 10
+method v3 + Metode Bertingkat, 5 levels) and ~/workspace/makefun/TOP10-PLAYBOOK.md
+first, then build a v1 entry in a fresh VM-only session: 38 stories dated
+27 Nov 2026, 7 balanced regions, 13 drawn + 25 ALSO, full solid world map
+with 13 numbered pins coloured per region, claim badges + named source on
+every item, red punch banner per lead, 2 charts, IN NUMBERS strip, DATE CHECK
++ HOW SURE + HOW CHECKED footer. Deterministic 1024x1024 entry.png (render
+twice, sha256 identical). Stop after QC passes — do not submit, do not bundle.
